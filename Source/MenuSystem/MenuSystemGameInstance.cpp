@@ -17,7 +17,7 @@ void UMenuSystemGameInstance::LaunchDedicatedServer()
     FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
     FString ExecutablePath = FPaths::Combine(ProjectDir, TEXT("Binaries/Win64/MenuSystemServer.exe"));
     FString MapPath = TEXT("/Game/ThirdPerson/Maps/Lobby");
-    FString Params = FString::Printf(TEXT("%s -log -nosteam -port=7777"), *MapPath);
+    FString Params = FString::Printf(TEXT("%s -log -port=7777"), *MapPath);
 
     FPlatformProcess::CreateProc(
         *ExecutablePath,
