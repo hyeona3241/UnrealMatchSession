@@ -78,11 +78,10 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void JoinGameSession();
 
-protected:
 	UFUNCTION(BlueprintCallable)
 	void CreateGameSession();
 
-	
+protected:
 
 	void OnCreateSessionComplete(FName SessionName, bool bWasSuccessful);
 	void OnFindSessionComplete(bool bWasSuccessful);

@@ -17,8 +17,16 @@ class MENUSYSTEM_API UMenuSystemGameInstance : public UGameInstance
 public:
 	virtual void Init() override;
 
+	void OnMapLoaded(UWorld* LoadedWorld);
+
 	UFUNCTION(BlueprintCallable)
 	void LaunchDedicatedServer();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+	TSubclassOf<UUserWidget> MainMenuWidgetClass;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Session")
+	FString DesiredMap;
 
 
 private:

@@ -63,6 +63,7 @@ void AMenuSystemGameMode::BeginPlay()
         UE_LOG(LogTemp, Log, TEXT("Dedicated server GameMode BeginPlay"));
         CreateSessionIfServer();
     }
+
 }
 
 void AMenuSystemGameMode::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
