@@ -14,38 +14,64 @@ void UMenuSystemGameInstance::Init()
 
 void UMenuSystemGameInstance::OnMapLoaded(UWorld* LoadedWorld)
 {
-    if (!LoadedWorld || !MainMenuWidgetClass)
+    if (!LoadedWorld)
         return;
 
-    // 서버에서는 UI 생성 안함
+    // 전용 서버는 UI 로직 자체 건너뛸 것
     if (LoadedWorld->GetNetMode() == NM_DedicatedServer)
         return;
 
-    // 맵 이름이 로비면 UI 생성 안함
+    // 맵 이름에서 PIE 접두어 지우기
     FString MapName = LoadedWorld->GetMapName();
-    MapName.RemoveFromStart(LoadedWorld->StreamingLevelsPrefix); // UEDPIE 접두어 제거
+    MapName.RemoveFromStart(LoadedWorld->StreamingLevelsPrefix);
 
-    if (MapName.Equals("Lobby") || MapName.Equals("LobbyMap")) // 로비 맵 이름에 맞게 수정
+    // --- 1) 로비 맵일 때 ---
+    if (MapName.Equals(TEXT("Lobby")) || MapName.Equals(TEXT("LobbyMap")))
+    {
+        // 화면에 붙어 있던 메인 메뉴 위젯 제거
+        if (MainMenuWidgetInstance)
+        {
+            MainMenuWidgetInstance->RemoveFromParent();
+            MainMenuWidgetInstance = nullptr;
+        }
+
+        // 완전 게임 모드로 전환 (커서 숨기고 입력도 게임만)
+        if (APlayerController* PC = LoadedWorld->GetFirstPlayerController())
+        {
+            PC->bShowMouseCursor = false;
+            PC->SetInputMode(FInputModeGameOnly());
+        }
+        return;
+    }
+
+    // --- 2) 그 외(메인 메뉴 등) 맵일 때 ---
+    if (!MainMenuWidgetClass)
         return;
 
-    // 위젯 생성 및 추가
-    UUserWidget* MainMenu = CreateWidget<UUserWidget>(LoadedWorld, MainMenuWidgetClass);
-    if (!MainMenu) return;
-
-    MainMenu->AddToViewport();
-
-    // 플레이어 컨트롤러 가져오기
-    APlayerController* PC = LoadedWorld->GetFirstPlayerController();
-    if (PC)
+    // 이미 붙어 있던 게 있으면 지우고 새로 붙이기
+    if (MainMenuWidgetInstance)
     {
-        // 마우스 커서 표시
+        MainMenuWidgetInstance->RemoveFromParent();
+        MainMenuWidgetInstance = nullptr;
+    }
+
+    // 위젯 생성
+    MainMenuWidgetInstance = CreateWidget<UUserWidget>(LoadedWorld, MainMenuWidgetClass);
+    if (!MainMenuWidgetInstance)
+        return;
+
+    MainMenuWidgetInstance->AddToViewport();
+
+    // 커서 보이기 + GameAndUI 입력 모드
+    if (APlayerController* PC = LoadedWorld->GetFirstPlayerController())
+    {
         PC->bShowMouseCursor = true;
 
-        // 입력 모드 설정
         FInputModeGameAndUI InputMode;
-        InputMode.SetWidgetToFocus(MainMenu->TakeWidget());
+        InputMode.SetWidgetToFocus(MainMenuWidgetInstance->TakeWidget());
         InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
         InputMode.SetHideCursorDuringCapture(false);
+
         PC->SetInputMode(InputMode);
     }
 }

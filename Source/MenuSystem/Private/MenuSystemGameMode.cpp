@@ -20,28 +20,31 @@ AMenuSystemGameMode::AMenuSystemGameMode()
 
 void AMenuSystemGameMode::CreateSessionIfServer()
 {
-    IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
-    if (!Subsystem) return;
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    if (!OSS) return;
+    auto SessInt = OSS->GetSessionInterface();
+    if (!SessInt.IsValid()) return;
 
-    IOnlineSessionPtr SessionInterface = Subsystem->GetSessionInterface();
-    if (!SessionInterface.IsValid()) return;
+    // Delegate 등록
+    SessInt->AddOnCreateSessionCompleteDelegate_Handle(
+        FOnCreateSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnCreateSessionComplete)
+    );
 
-    FOnlineSessionSettings SessionSettings;
-    SessionSettings.bIsLANMatch = false;
-    SessionSettings.NumPublicConnections = 4;
-    SessionSettings.bAllowJoinInProgress = true;
-    SessionSettings.bAllowJoinViaPresence = true;
-    SessionSettings.bShouldAdvertise = true;
-    SessionSettings.bUsesPresence = true;
-    SessionSettings.bUseLobbiesIfAvailable = true;
-    SessionSettings.Set(FName("MatchType"), FString("FreeForAll"), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+    // 설정
+    FOnlineSessionSettings Settings;
+    Settings.bIsLANMatch = false;
+    Settings.NumPublicConnections = 4;
+    Settings.bShouldAdvertise = true;
+    Settings.Set(FName("MatchType"), FString("FreeForAll"), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
-    // 세션 생성 후 콜백 함수 바인딩
-    FOnCreateSessionCompleteDelegate CreateSessionCompleteDelegate;
-    CreateSessionCompleteDelegate.BindUObject(this, &AMenuSystemGameMode::OnCreateSessionComplete);
+    // 실제 세션 생성
+    int32 HostingPlayerIndex = 0;
 
-    // 세션 생성 호출
-    SessionInterface->CreateSession(0, NAME_GameSession, SessionSettings);
+    SessInt->CreateSession(
+        HostingPlayerIndex,
+        NAME_GameSession,
+        Settings
+    );
 
     if (GEngine)
     {
@@ -60,10 +63,8 @@ void AMenuSystemGameMode::BeginPlay()
 
     if (GetWorld()->GetNetMode() == NM_DedicatedServer)
     {
-        UE_LOG(LogTemp, Log, TEXT("Dedicated server GameMode BeginPlay"));
         CreateSessionIfServer();
     }
-
 }
 
 void AMenuSystemGameMode::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
@@ -80,13 +81,10 @@ void AMenuSystemGameMode::OnCreateSessionComplete(FName SessionName, bool bWasSu
             );
         }
 
-        // 서버는 클라이언트에게 세션을 공개하고 로비로 이동
-        UWorld* World = GetWorld();
-        if (World)
-        {
-            // 이 명령으로 서버는 로비로 이동
-            World->ServerTravel(FString("/Game/ThirdPerson/Maps/Lobby?listen"));
-        }
+        if (!bWasSuccessful) return;
+
+        // 세션 만든 다음, 서버는 로비 맵으로 이동
+        GetWorld()->ServerTravel(TEXT("/Game/ThirdPerson/Maps/Lobby?listen"));
     }
     else
     {

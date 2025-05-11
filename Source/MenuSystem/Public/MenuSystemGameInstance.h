@@ -34,5 +34,8 @@ private:
 
 	// 서버가 실행된 후 3초 뒤에 클라이언트가 자동으로 로비로 이동
 	void AutoJoinAfterServerBoot();
+
+	UPROPERTY()
+	UUserWidget* MainMenuWidgetInstance = nullptr;
 	
 };

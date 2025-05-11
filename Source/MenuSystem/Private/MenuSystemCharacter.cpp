@@ -76,11 +76,22 @@ AMenuSystemCharacter::AMenuSystemCharacter():
 	}
 }
 
+// MenuSystemCharacter.cpp
+
 void AMenuSystemCharacter::BeginPlay()
 {
-	// Call the base class  
 	Super::BeginPlay();
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+		{
+			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+		}
+	}
 }
+
 
 void AMenuSystemCharacter::CreateGameSession()
 {
@@ -116,136 +127,58 @@ void AMenuSystemCharacter::CreateGameSession()
 
 void AMenuSystemCharacter::JoinGameSession()
 {
-	//Find Game Session
-
-	if (!OnlineSessionInterface.IsValid())
-	{
-		return;
-	}
-	// 세션 찾기
-	IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
-	if (!Subsystem) return;
-
-	OnlineSessionInterface = Subsystem->GetSessionInterface();
 	if (!OnlineSessionInterface.IsValid()) return;
 
-	// 세션 검색 시작
-	OnlineSessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
+	// Delegate 등록
+	OnlineSessionInterface->AddOnFindSessionsCompleteDelegate_Handle(
+		FindSessionsCompleteDelegate
+	);
+	OnlineSessionInterface->AddOnJoinSessionCompleteDelegate_Handle(
+		JoinSessionCompleteDelegate
+	);
+
+	// 검색 세션 설정
 	SessionSearch = MakeShareable(new FOnlineSessionSearch());
-	SessionSearch->MaxSearchResults = 10000;
 	SessionSearch->bIsLanQuery = false;
+	SessionSearch->MaxSearchResults = 100;
 	SessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
 
-	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
-	OnlineSessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), SessionSearch.ToSharedRef());
+	const ULocalPlayer* LP = GetWorld()->GetFirstLocalPlayerFromController();
+	OnlineSessionInterface->FindSessions(*LP->GetPreferredUniqueNetId(), SessionSearch.ToSharedRef());
 }
 
 void AMenuSystemCharacter::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
 {
-	if (bWasSuccessful)
-	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Blue,
-				FString::Printf(TEXT("Created session: %s"), *SessionName.ToString())
-			);
-		}
-
-		UWorld* World = GetWorld();
-		if (World)
-		{
-			World->ServerTravel(FString("/Game/ThirdPerson/Maps/Lobby?listen"));
-		}
-	}
-	else 
-	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Red,
-				FString(TEXT("Failed to create session!"))
-			);
-		}
-	}
+	
 }
 
 void AMenuSystemCharacter::OnFindSessionComplete(bool bWasSuccessful)
 {
-	if (!OnlineSessionInterface.IsValid())
-	{
-		return;
-	}
+	if (!bWasSuccessful || !SessionSearch.IsValid()) return;
 
-	for (auto Result : SessionSearch->SearchResults)
+	for (auto& Result : SessionSearch->SearchResults)
 	{
-		FString Id = Result.GetSessionIdStr();
-		FString User = Result.Session.OwningUserName;
-
 		FString MatchType;
 		Result.Session.SessionSettings.Get(FName("MatchType"), MatchType);
-
-		if (GEngine)
+		if (MatchType == TEXT("FreeForAll"))
 		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Cyan,
-				FString::Printf(TEXT("Id : %s, User : %s"), *Id, *User)
-			);
-		}
-		
-
-		if (MatchType == FString("FreeForAll"))
-		{
-			if (GEngine)
-			{
-				GEngine->AddOnScreenDebugMessage(
-					-1,
-					15.f,
-					FColor::Cyan,
-					FString::Printf(TEXT("Joining Match Type : %s"), *MatchType)
-				);
-			}
-
-			OnlineSessionInterface->AddOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegate);
-			const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
-			OnlineSessionInterface->JoinSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, Result);
+			const ULocalPlayer* LP = GetWorld()->GetFirstLocalPlayerFromController();
+			OnlineSessionInterface->JoinSession(*LP->GetPreferredUniqueNetId(), NAME_GameSession, Result);
+			return;
 		}
 	}
 }
 
 void AMenuSystemCharacter::OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
 {
-	if (!OnlineSessionInterface.IsValid())
+	FString ConnectString;
+	if (OnlineSessionInterface->GetResolvedConnectString(NAME_GameSession, ConnectString))
 	{
-		return;
-	}
-
-	FString Address;
-	if (OnlineSessionInterface->GetResolvedConnectString(NAME_GameSession, Address))
-	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Yellow,
-				FString::Printf(TEXT("Connect String : %s"), *Address)
-			);
-		}
-
-		APlayerController* PlayerController = GetGameInstance()->GetFirstLocalPlayerController();
-		if (PlayerController)
-		{
-			PlayerController->ClientTravel(Address, ETravelType::TRAVEL_Absolute);
-		}
+		// 이 한 줄이 클라이언트 화면을 서버의 Lobby 맵으로 이동시켜 줍니다.
+		GetWorld()->GetFirstPlayerController()->ClientTravel(ConnectString, ETravelType::TRAVEL_Absolute);
 	}
 }
+
 
 //////////////////////////////////////////////////////////////////////////
 // Input
