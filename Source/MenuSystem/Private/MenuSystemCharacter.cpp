@@ -13,6 +13,8 @@
 #include "OnlineSubsystem.h"
 #include "OnlineSessionSettings.h"
 #include "Online/OnlineSessionNames.h"
+#include "steam/steam_api.h"
+#include <steam/steam_gameserver.h> 
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 

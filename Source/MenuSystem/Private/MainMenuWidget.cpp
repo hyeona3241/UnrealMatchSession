@@ -53,9 +53,10 @@ void UMainMenuWidget::OnJoinRoomPressed()
     AMenuSystemCharacter* Ch = Cast<AMenuSystemCharacter>(PC->GetPawn());
     if (Ch)
     {
-        Ch->JoinGameSession();
-
-        // º» À§Á¬(MainMenu)À» Á¦°Å
-        this->RemoveFromParent();
+        if (auto* GI = Cast<UMenuSystemGameInstance>(UGameplayStatics::GetGameInstance(this)))
+        {
+            GI->JoinGameSession();       
+            RemoveFromParent();                // UI ´Ý±â
+        }
     }
 }

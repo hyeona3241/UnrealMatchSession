@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
+#include "Logging/LogMacros.h"
+#include "Interfaces/OnlineSessionInterface.h"
 #include "MenuSystemGameInstance.generated.h"
 
 /**
@@ -29,6 +31,9 @@ public:
 	FString DesiredMap;
 
 
+	UFUNCTION(BlueprintCallable)
+	void JoinGameSession();
+
 private:
 	bool bIsHostClient = false;  // 호스트 클라이언트 여부
 
@@ -37,5 +42,19 @@ private:
 
 	UPROPERTY()
 	UUserWidget* MainMenuWidgetInstance = nullptr;
+
+	// 세션 인터페이스
+	IOnlineSessionPtr SessionInterface;
+	TSharedPtr<FOnlineSessionSearch> SessionSearch;
+
+	// 델리게이트 핸들들
+	FOnFindSessionsCompleteDelegate FindSessionsCompleteDelegate;
+	FOnJoinSessionCompleteDelegate JoinSessionCompleteDelegate;
+
+	// 콜백
+	void OnFindSessionComplete(bool bWasSuccessful);
+	void OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
+
+	void InitSteamServer();
 	
 };

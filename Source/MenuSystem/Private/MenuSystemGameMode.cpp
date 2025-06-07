@@ -6,6 +6,8 @@
 #include "Interfaces/OnlineSessionInterface.h"
 #include "MenuSystemCharacter.h"
 #include "Engine/Engine.h"
+#include <steam/steam_gameserver.h> 
+#include "steam/steam_api.h"
 
 AMenuSystemGameMode::AMenuSystemGameMode()
 {
@@ -22,29 +24,28 @@ void AMenuSystemGameMode::CreateSessionIfServer()
 {
     IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
     if (!OSS) return;
-    auto SessInt = OSS->GetSessionInterface();
-    if (!SessInt.IsValid()) return;
+
+    IOnlineSessionPtr SessionInt = OSS->GetSessionInterface();
+    if (!SessionInt.IsValid()) return;
 
     // Delegate 殿废
-    SessInt->AddOnCreateSessionCompleteDelegate_Handle(
+    SessionInt->AddOnCreateSessionCompleteDelegate_Handle(
         FOnCreateSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnCreateSessionComplete)
     );
 
-    // 汲沥
     FOnlineSessionSettings Settings;
+    Settings.bIsDedicated = true; 
     Settings.bIsLANMatch = false;
     Settings.NumPublicConnections = 4;
     Settings.bShouldAdvertise = true;
+    Settings.bUsesPresence = false; 
+    Settings.bAllowJoinInProgress = true;
+    Settings.bAllowJoinViaPresence = false; 
+    Settings.bUseLobbiesIfAvailable = false; 
     Settings.Set(FName("MatchType"), FString("FreeForAll"), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
-    // 角力 技记 积己
     int32 HostingPlayerIndex = 0;
-
-    SessInt->CreateSession(
-        HostingPlayerIndex,
-        NAME_GameSession,
-        Settings
-    );
+    bool bSuccess = SessionInt->CreateSession(HostingPlayerIndex, NAME_GameSession, Settings);
 
     if (GEngine)
     {
@@ -52,7 +53,7 @@ void AMenuSystemGameMode::CreateSessionIfServer()
             -1,
             15.f,
             FColor::Yellow,
-            FString::Printf(TEXT("Creating Session!"))
+            FString::Printf(TEXT("Creating Session! Success: %s"), bSuccess ? TEXT("Yes") : TEXT("No"))
         );
     }
 }

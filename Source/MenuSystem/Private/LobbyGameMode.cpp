@@ -7,12 +7,17 @@
 #include "LobbyGameState.h"     
 #include "LobbyPlayerController.h" 
 #include "MenuSystemCharacter.h"
+#include "LobbyPlayerState.h"
+#include "GameFramework/PlayerController.h"
+#include "steam/steam_api.h"
+#include <steam/steam_gameserver.h> 
 
 //로비에서 사용하는 모드, 스테이트, 컨트롤러 바꿔주기
 ALobbyGameMode::ALobbyGameMode()
 {
     GameStateClass = ALobbyGameState::StaticClass();
     PlayerControllerClass = ALobbyPlayerController::StaticClass();
+    PlayerStateClass = ALobbyPlayerState::StaticClass();
 
     static ConstructorHelpers::FClassFinder<APawn> PlayerPawnBPClass(
         TEXT("/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter.BP_ThirdPersonCharacter_C")
@@ -41,3 +46,23 @@ void ALobbyGameMode::BeginPlay()
     }
 }
 
+void ALobbyGameMode::PostLogin(APlayerController* NewPlayer)
+{
+    Super::PostLogin(NewPlayer);
+
+    if (NextAvailableSlot > 4)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("최대 플레이어 수(4명)를 초과했습니다."));
+        return;
+    }
+
+    if (ALobbyPlayerState* PS = Cast<ALobbyPlayerState>(NewPlayer->PlayerState))
+    {
+        PS->PlayerSlot = NextAvailableSlot++;
+        PS->PlayerUID = PS->GetUniqueId().IsValid()
+            ? PS->GetUniqueId()->ToString()
+            : TEXT("UnknownID");
+
+        UE_LOG(LogTemp, Log, TEXT("Player%d 접속: UID=%s"), PS->PlayerSlot, *PS->PlayerUID);
+    }
+}

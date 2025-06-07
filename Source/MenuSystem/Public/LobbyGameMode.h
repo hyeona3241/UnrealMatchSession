@@ -19,5 +19,9 @@ public:
 
     // 로비 진입 시 호출
     virtual void BeginPlay() override;
+
+    int32 NextAvailableSlot = 1;
+
+    virtual void PostLogin(APlayerController* NewPlayer) override;
 	
 };
