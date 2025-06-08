@@ -9,8 +9,6 @@
 #include "MenuSystemCharacter.h"
 #include "LobbyPlayerState.h"
 #include "GameFramework/PlayerController.h"
-#include "steam/steam_api.h"
-#include <steam/steam_gameserver.h> 
 
 //로비에서 사용하는 모드, 스테이트, 컨트롤러 바꿔주기
 ALobbyGameMode::ALobbyGameMode()

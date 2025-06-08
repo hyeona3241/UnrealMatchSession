@@ -35,13 +35,26 @@ void UMainMenuWidget::OnCreateRoomPressed()
 
 void UMainMenuWidget::HandleMapConfirmed(const FString& MapName)
 {
+    UE_LOG(LogTemp, Log, TEXT("MainMenuWidget: 맵 선택 확인됨: %s"), *MapName);
+
     //여기서 서버가 로비 생성 호출
     if (auto* GI = Cast<UMenuSystemGameInstance>(UGameplayStatics::GetGameInstance(this)))
     {
+        UE_LOG(LogTemp, Log, TEXT("MainMenuWidget: GameInstance 찾음, HostSession 호출!"));
+
         GI->DesiredMap = MapName;
 
-        GI->LaunchDedicatedServer();
-
+        if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+        {
+            if (auto* Ch = Cast<AMenuSystemCharacter>(PC->GetPawn()))
+            {
+                Ch->CreateGameSession();
+            }
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("MainMenuWidget: GameInstance 찾기 실패!"));
     }
 }
 
@@ -53,10 +66,9 @@ void UMainMenuWidget::OnJoinRoomPressed()
     AMenuSystemCharacter* Ch = Cast<AMenuSystemCharacter>(PC->GetPawn());
     if (Ch)
     {
-        if (auto* GI = Cast<UMenuSystemGameInstance>(UGameplayStatics::GetGameInstance(this)))
-        {
-            GI->JoinGameSession();       
-            RemoveFromParent();                // UI 닫기
-        }
+        Ch->JoinGameSession();
+
+        // 본 위젯(MainMenu)을 제거
+        this->RemoveFromParent();
     }
 }

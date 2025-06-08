@@ -13,14 +13,12 @@ class AMenuSystemGameMode : public AGameModeBase
 
 public:
 	AMenuSystemGameMode();
-	void CreateSessionIfServer();
+	/*void CreateSessionIfServer();*/
 
 protected:
 	virtual void BeginPlay() override;
 
-	
-	void OnCreateSessionComplete(FName SessionName, bool bWasSuccessful);
+
+	/*void OnCreateSessionComplete(FName SessionName, bool bWasSuccessful);*/
 };
-
-
 

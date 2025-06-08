@@ -38,6 +38,8 @@ void UMapSelectWidget::OnConfirmClicked()
 {
     if (!SelectedMap.IsEmpty())
     {
+        UE_LOG(LogTemp, Log, TEXT("MapSelectWidget: 맵 선택됨: %s"), *SelectedMap);
+
         // 선택된 맵 이름을 브로드캐스트
         OnMapConfirmed.Broadcast(SelectedMap);
         // UI 닫기

@@ -13,22 +13,21 @@
 #include "OnlineSubsystem.h"
 #include "OnlineSessionSettings.h"
 #include "Online/OnlineSessionNames.h"
-#include "steam/steam_api.h"
-#include <steam/steam_gameserver.h> 
+#include "OnlineSubsystemUtils.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
 //////////////////////////////////////////////////////////////////////////
 // AMenuSystemCharacter
 
-AMenuSystemCharacter::AMenuSystemCharacter():
+AMenuSystemCharacter::AMenuSystemCharacter() :
 	CreateSessionCompleteDelegate(FOnCreateSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnCreateSessionComplete)),
 	FindSessionsCompleteDelegate(FOnFindSessionsCompleteDelegate::CreateUObject(this, &ThisClass::OnFindSessionComplete)),
 	JoinSessionCompleteDelegate(FOnJoinSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnJoinSessionComplete))
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
-		
+
 	// Don't rotate when the controller rotates. Let that just affect the camera.
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
@@ -73,27 +72,16 @@ AMenuSystemCharacter::AMenuSystemCharacter():
 				15.f,
 				FColor::Blue,
 				FString::Printf(TEXT("Found subsystem %s"), *OnlineSubsystem->GetSubsystemName().ToString())
-				);
+			);
 		}
 	}
 }
-
-// MenuSystemCharacter.cpp
 
 void AMenuSystemCharacter::BeginPlay()
 {
+	// Call the base class  
 	Super::BeginPlay();
-
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
-			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
-		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
-		}
-	}
 }
-
 
 void AMenuSystemCharacter::CreateGameSession()
 {
@@ -124,62 +112,188 @@ void AMenuSystemCharacter::CreateGameSession()
 	SessionSettings->Set(FName("MatchType"), FString("FreeForAll"), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
 	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+	if (!LocalPlayer)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Error: LocalPlayer is null!"));
+		return;
+	}
+
 	OnlineSessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *SessionSettings);
-}
-
-void AMenuSystemCharacter::JoinGameSession()
-{
-	if (!OnlineSessionInterface.IsValid()) return;
-
-	// Delegate 등록
-	OnlineSessionInterface->AddOnFindSessionsCompleteDelegate_Handle(
-		FindSessionsCompleteDelegate
-	);
-	OnlineSessionInterface->AddOnJoinSessionCompleteDelegate_Handle(
-		JoinSessionCompleteDelegate
-	);
-
-	// 검색 세션 설정
-	SessionSearch = MakeShareable(new FOnlineSessionSearch());
-	SessionSearch->bIsLanQuery = false;
-	SessionSearch->MaxSearchResults = 100;
-	SessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
-
-	const ULocalPlayer* LP = GetWorld()->GetFirstLocalPlayerFromController();
-	OnlineSessionInterface->FindSessions(*LP->GetPreferredUniqueNetId(), SessionSearch.ToSharedRef());
 }
 
 void AMenuSystemCharacter::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
 {
-	
-}
-
-void AMenuSystemCharacter::OnFindSessionComplete(bool bWasSuccessful)
-{
-	if (!bWasSuccessful || !SessionSearch.IsValid()) return;
-
-	for (auto& Result : SessionSearch->SearchResults)
+	if (bWasSuccessful)
 	{
-		FString MatchType;
-		Result.Session.SessionSettings.Get(FName("MatchType"), MatchType);
-		if (MatchType == TEXT("FreeForAll"))
+		if (GEngine)
 		{
-			const ULocalPlayer* LP = GetWorld()->GetFirstLocalPlayerFromController();
-			OnlineSessionInterface->JoinSession(*LP->GetPreferredUniqueNetId(), NAME_GameSession, Result);
-			return;
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				15.f,
+				FColor::Blue,
+				FString::Printf(TEXT("Created session: %s"), *SessionName.ToString())
+			);
+		}
+
+		if (OnlineSessionInterface.IsValid())
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Green, TEXT("[OnCreateSessionComplete] Calling StartSession"));
+			bool bStarted = OnlineSessionInterface->StartSession(SessionName);
+			GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Green, FString::Printf(TEXT("[OnCreateSessionComplete] StartSession result: %d"), bStarted));
+		}
+		else
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				15.f,
+				FColor::Red,
+				FString::Printf(TEXT("Falled StartSession"))
+			);
+		}
+
+		UWorld* World = GetWorld();
+		if (World)
+		{
+			World->ServerTravel(FString("/Game/ThirdPerson/Maps/Lobby?listen"));
+		}
+	}
+	else
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				15.f,
+				FColor::Red,
+				FString(TEXT("Failed to create session!"))
+			);
 		}
 	}
 }
 
-void AMenuSystemCharacter::OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
+void AMenuSystemCharacter::OnFindSessionComplete(bool bWasSuccessful)
 {
-	FString ConnectString;
-	if (OnlineSessionInterface->GetResolvedConnectString(NAME_GameSession, ConnectString))
+	if (!OnlineSessionInterface.IsValid())
 	{
-		// 이 한 줄이 클라이언트 화면을 서버의 Lobby 맵으로 이동시켜 줍니다.
-		GetWorld()->GetFirstPlayerController()->ClientTravel(ConnectString, ETravelType::TRAVEL_Absolute);
+		return;
+	}
+
+	for (auto Result : SessionSearch->SearchResults)
+	{
+		FString Id = Result.GetSessionIdStr();
+		FString User = Result.Session.OwningUserName;
+
+		FString MatchType;
+		Result.Session.SessionSettings.Get(FName("MatchType"), MatchType);
+
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				15.f,
+				FColor::Cyan,
+				FString::Printf(TEXT("Id : %s, User : %s"), *Id, *User)
+			);
+		}
+
+
+		if (MatchType == FString("FreeForAll"))
+		{
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(
+					-1,
+					15.f,
+					FColor::Cyan,
+					FString::Printf(TEXT("Joining Match Type : %s"), *MatchType)
+				);
+			}
+
+			OnlineSessionInterface->AddOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegate);
+			const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+			OnlineSessionInterface->JoinSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, Result);
+		}
+
+		FString SessionInfo;
+		SessionInfo += FString::Printf(TEXT("Id=%s, User=%s"), *Result.GetSessionIdStr(), *Result.Session.OwningUserName);
+		Result.Session.SessionSettings.Get(FName("MatchType"), MatchType);
+		SessionInfo += FString::Printf(TEXT(", MatchType=%s"), *MatchType);
+		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Blue, SessionInfo);
 	}
 }
+
+void AMenuSystemCharacter::JoinGameSession()
+{
+	GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Cyan, TEXT("[JoinGameSession] Called."));
+
+	if (!OnlineSessionInterface.IsValid())
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("[JoinGameSession] OnlineSessionInterface is invalid!"));
+		return;
+	}
+
+	IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
+	if (!Subsystem)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("[JoinGameSession] Subsystem is invalid!"));
+		return;
+	}
+
+	OnlineSessionInterface = Subsystem->GetSessionInterface();
+	if (!OnlineSessionInterface.IsValid())
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("[JoinGameSession] SessionInterface is invalid!"));
+		return;
+	}
+
+	GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Green, TEXT("[JoinGameSession] Starting FindSessions..."));
+
+	OnlineSessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
+	SessionSearch = MakeShareable(new FOnlineSessionSearch());
+	SessionSearch->MaxSearchResults = 10000;
+	SessionSearch->bIsLanQuery = false;
+	SessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+
+	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+	OnlineSessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), SessionSearch.ToSharedRef());
+}
+
+void AMenuSystemCharacter::OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
+{
+	if (!OnlineSessionInterface.IsValid())
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("[OnJoinSessionComplete] OnlineSessionInterface invalid!"));
+		return;
+	}
+
+
+	FString Address;
+	bool bGotAddress = OnlineSessionInterface->GetResolvedConnectString(NAME_GameSession, Address);
+
+	if (bGotAddress)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Yellow,
+			FString::Printf(TEXT("[OnJoinSessionComplete] Got Connect String: %s"), *Address));
+
+		APlayerController* PlayerController = GetGameInstance()->GetFirstLocalPlayerController();
+		if (PlayerController)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Green, TEXT("[OnJoinSessionComplete] Calling ClientTravel"));
+			PlayerController->ClientTravel(Address, ETravelType::TRAVEL_Absolute);
+		}
+		else
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("[OnJoinSessionComplete] PlayerController is null!"));
+		}
+	}
+	else
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("[OnJoinSessionComplete] Failed to get ConnectString!"));
+		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, FString::Printf(TEXT("JoinSession: No connect string for session: %s"), *SessionName.ToString()));
+	}
+}
+
+
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -195,10 +309,10 @@ void AMenuSystemCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 			Subsystem->AddMappingContext(DefaultMappingContext, 0);
 		}
 	}
-	
+
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
-		
+
 		// Jumping
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
@@ -228,7 +342,7 @@ void AMenuSystemCharacter::Move(const FInputActionValue& Value)
 
 		// get forward vector
 		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-	
+
 		// get right vector 
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
